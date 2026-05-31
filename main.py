@@ -1,9 +1,8 @@
 import pandas as pd
-from dotenv import load_dotenv
-import os
 from cleaner import generate_row_hash, get_cleaned_df
 from clickup import build_base_request, create_clickup_task, update_clickup_task
 from colors import GREEN, RED, RESET
+from config import API_KEY, LISTS_IDS, MEMBERS_IDS
 
 def main():
     sheet: pd.DataFrame = pd.read_excel("demandas.xlsx")
@@ -16,21 +15,6 @@ def main():
     df_sheet = get_cleaned_df(sheet)
     print(f"Total de linhas: {len(df_sheet)}")
     print(df_sheet)
-
-    load_dotenv()
-
-    API_KEY = os.getenv("CLICKUP_API_KEY")
-
-    MEMBERS_IDS = {
-        "bruno": os.getenv("MEMBER_ID"),
-        "gabriel": os.getenv("MEMBER_ID"),
-        "pietra": os.getenv("MEMBER_ID")
-    }
-
-    LISTS_IDS = {
-        "banco de dados": os.getenv("BD_LIST_ID"),
-        "inteligência artificial": os.getenv("IA_LIST_ID")
-    }
 
     for index, row in df_sheet.iterrows():
         headers, base_payload = build_base_request(
