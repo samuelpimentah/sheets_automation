@@ -1,95 +1,8 @@
 import pandas as pd
-import numpy as np
-import requests
-from numpy.f2py.auxfuncs import throw_error
-from datetime import datetime
 from dotenv import load_dotenv
 import os
-
-def get_cleaned_df(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Função para limpar o DataFrame, removendo linhas com valores vazios ou nulos, exceto na coluna 'descrição'
-    OBS.: Em breve, 'descrição' nula será preenchida por um agente
-    """
-    cleaned_df: pd.DataFrame = df.replace(r'^\s*$', np.nan, regex=True)
-
-    for column in cleaned_df.columns:
-        if cleaned_df[column].dtype == 'string':
-            cleaned_df[column] = cleaned_df[column].str.strip()
-
-    useless_rows = []
-
-    for i, row in cleaned_df.iterrows():
-        for column in cleaned_df.columns:
-            if column.lower() != 'descrição' and pd.isna(row[column]):
-                useless_rows.append(i)
-                break
-
-    cleaned_df = cleaned_df.drop(useless_rows)
-
-    return cleaned_df
-
-def nan_to_none(value):
-    return None if pd.isna(value) else value
-
-def create_clickup_task(
-    title: str,
-    description: str,
-    due_date: str,
-    status: str,
-    priority: str,
-    assignee: str,
-    sprint: int,
-    subject: str,
-    api_key: str,
-    lists_ids: dict,
-    members_ids: dict,
-) -> bool:
-    """
-    Função para criar uma tarefa no ClickUp usando a API
-    """
-
-    priorities = {
-        "baixa": 4,
-        "média": 3,
-        "alta": 2,
-        "urgente": 1
-    }
-
-    list_id = int(lists_ids[subject.lower()]) if subject.lower() in lists_ids.keys() else None
-
-    if list_id is not None:
-        url = f"https://api.clickup.com/api/v2/list/{list_id}/task"
-    else:
-        print("Board não encontrado.")
-        return False
-
-    assignee_id = int(members_ids[assignee.lower()]) if assignee.lower() in members_ids.keys() else None
-    priority_id = int(priorities[priority.lower()]) if priority.lower() in priorities.keys() else -1
-    due_date_ms = int(pd.to_datetime(due_date).timestamp() * 1000) if due_date else None
-
-    payload = {
-        "name": nan_to_none(title),
-        "description": nan_to_none(description),
-        "assignees": [assignee_id] if assignee_id else [],
-        "status": nan_to_none(status),
-        "priority": priority_id,
-        "due_date": due_date_ms,
-        "tags": [f"sprint {sprint}"],
-    }
-
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "Authorization": api_key
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-
-    if response.status_code == 200:
-        return True
-    else:
-        raise ValueError(f"Erro ao criar tarefa: {response.status_code} - {response.text}")
+from cleaner import get_cleaned_df
+from clickup import create_clickup_task
 
 def main():
     sheet: pd.DataFrame = pd.read_excel("demandas.xlsx")
@@ -118,8 +31,8 @@ def main():
         "inteligência artificial": os.getenv("IA_LIST_ID")
     }
 
-    try:
-        for _, row in df_sheet.iterrows():
+    for _, row in df_sheet.iterrows():
+        try:
             api_success = create_clickup_task(
                 title=row["Tarefa"],
                 description=row["Descrição"],
@@ -136,10 +49,11 @@ def main():
 
             if api_success:
                 print(f"Tarefa '{row['Tarefa']}' criada com sucesso!")
+                print(api_success)
             else:
-                print("Erro ao criar tarefa!")
-    except Exception as e:
-        print(f"Erro com a API: {e}")
+                print(f"Falha lógica ao tentar criar: '{row['Tarefa']}'")
+        except Exception as e:
+            print(f"Erro crítico na tarefa '{row['Tarefa']}': {e}")
 
 if __name__ == "__main__":
     main()
