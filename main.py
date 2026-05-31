@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from pandas._config import display
-
 
 def get_cleaned_df(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -11,7 +9,7 @@ def get_cleaned_df(df: pd.DataFrame) -> pd.DataFrame:
     cleaned_df: pd.DataFrame = df.replace(r'^\s*$', np.nan, regex=True)
 
     for column in cleaned_df.columns:
-        if cleaned_df[column].dtype == 'string':  # string/text columns
+        if cleaned_df[column].dtype == 'string':
             cleaned_df[column] = cleaned_df[column].str.strip()
 
     useless_rows = []
