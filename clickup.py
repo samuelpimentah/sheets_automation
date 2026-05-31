@@ -1,6 +1,7 @@
 import pandas as pd
 import requests
 from colors import RED, RESET
+from config import PRIORITIES
 
 def build_base_request(
     title: str,
@@ -11,14 +12,8 @@ def build_base_request(
     api_key: str,
 ) -> list[dict] | None:
     """Função que se conecta à API do ClickUp e gera o payload padrão para criar ou atualizar task"""
-    priorities = {
-        "baixa": 4,
-        "média": 3,
-        "alta": 2,
-        "urgente": 1,
-    }
 
-    priority_id = int(priorities[priority.lower()]) if priority.lower() in priorities.keys() else -1
+    priority_id = int(PRIORITIES[priority.lower()]) if priority.lower() in PRIORITIES.keys() else -1
     due_date_ms = int(pd.to_datetime(due_date).timestamp() * 1000) if due_date else None
 
     headers = {
