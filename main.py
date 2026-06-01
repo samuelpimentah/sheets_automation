@@ -1,11 +1,17 @@
-import pandas as pd
 from cleaner import generate_row_hash, get_cleaned_df
 from clickup import build_base_request, create_clickup_task, update_clickup_task
 from colors import GREEN, RED, RESET
-from config import API_KEY, LISTS_IDS, MEMBERS_IDS
+from config import API_KEY, LISTS_IDS, MEMBERS_IDS, get_google_sheet_as_df
 
 def main():
-    sheet: pd.DataFrame = pd.read_excel("demandas.xlsx")
+    print("=== CONECTANDO AO GOOGLE SHEETS ===")
+    # Nome exato da sua planilha na nuvem e o nome da aba (Página1, etc)
+    spreadsheet_name = "demandas"
+    sheet_name = "demandas1o"
+
+    spread, sheet = get_google_sheet_as_df(spreadsheet_name=spreadsheet_name, sheet_name=sheet_name)
+
+    print(f"Total de linhas encontradas na nuvem: {len(sheet)}")
 
     print(f"{GREEN}=== DADOS ORIGINAIS ==={RESET}")
     print(f"Total de linhas: {len(sheet)}")
@@ -33,7 +39,7 @@ def main():
 
         if current_id:
             if row_hash and row_hash == new_hash:
-                print(f"{GREEN}[Ignorado] Tarefa '{row['Tarefa']}' não sofreu alterações no Excel.{RESET}")
+                print(f"{GREEN}[Ignorado] Tarefa '{row['Tarefa']}' não sofreu alterações no Sheets.{RESET}")
                 continue
 
             api_success = update_clickup_task(
@@ -63,11 +69,11 @@ def main():
                 print(f"{GREEN}Tarefa '{row['Tarefa']}' criada com sucesso! ID: {task_id}{RESET}")
 
     print(f"\n{GREEN}=== SINCRONIZAÇÃO CONCLUÍDA ==={RESET}")
-    print(f"{GREEN}Gravando os novos IDs gerados e Hash de volta no arquivo Excel...{RESET}")
+    print(f"{GREEN}Gravando os novos IDs gerados e Hash de volta no Google Sheets...{RESET}")
 
     try:
-        df_sheet.to_excel("demandas.xlsx", index=False)
-        print(f"{GREEN}Arquivo 'demandas.xlsx' atualizado e salvo com sucesso!{RESET}")
+        spread.df_to_sheet(df_sheet, index=False, sheet=sheet_name, replace=True)
+        print("\n=== ALTERAÇÕES SALVAS DIRETO NO GOOGLE SHEETS ===")
     except Exception as e:
         print(f"{RED}Erro ao tentar gravar dados: {e}{RESET}")
 

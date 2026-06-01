@@ -7,7 +7,7 @@ def generate_row_hash(row: pd.Series) -> str:
     Gera uma assinatura digital única (MD5) baseada nos valores atuais da linha.
     Se qualquer um desses valores mudar no Excel, o Hash mudará.
     """
-    texto_linha = (
+    row_text = (
         f"{row['Tarefa']}"
         f"{row['Descrição']}"
         f"{row['Status']}"
@@ -16,9 +16,9 @@ def generate_row_hash(row: pd.Series) -> str:
         f"{row['Data de entrega']}"
         f"{row['Sprint']}"
     )
-    return hashlib.md5(texto_linha.encode('utf-8')).hexdigest()
+    return hashlib.md5(row_text.encode('utf-8')).hexdigest()
 
-def get_cleaned_df(df: pd.DataFrame) -> pd.DataFrame:
+def get_cleaned_df(df):
     """
     Função para limpar o DataFrame, removendo linhas com valores vazios ou nulos, exceto na coluna 'descrição'
     OBS.: Em breve, 'descrição' nula será preenchida por um agente
@@ -38,6 +38,6 @@ def get_cleaned_df(df: pd.DataFrame) -> pd.DataFrame:
                 break
 
     cleaned_df = cleaned_df.drop(useless_rows)
-    cleaned_df = cleaned_df.replace({np.nan: None})
+    cleaned_df = cleaned_df.fillna("")
 
     return cleaned_df
