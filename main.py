@@ -13,29 +13,39 @@ from config import API_KEY, LISTS_IDS, MEMBERS_IDS, get_google_sheet_as_df
 
 def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
     """
-    FASE 1: Extrai as atualizações recentes das listas do ClickUp e sobrescreve os dados desatualizados da planilha.
+    FASE 1: Procura por atualizações recentes nas listas do ClickUp, corrige
+    divergências e adiciona tarefas totalmente novas criadas direto na nuvem.
     Retorna o DataFrame atualizado.
     """
-    print(f"\n{GREEN}=== FASE 1: CLICKUP -> SHEETS ==={RESET}")
+    print(f"\n{GREEN}=== FASE 1: INICIANDO FLUXO REVERSO (CLICKUP -> SHEETS) ==={RESET}")
 
     priority_map = {1: "Urgente", 2: "Alta", 3: "Normal", 4: "Baixa"}
+    subject_map = {
+        "banco de dados": "Banco de dados",
+        "inteligência artificial": "Inteligência artificial"
+    }
+
     all_clickup_tasks = {}
 
-    # Fetch tasks from all registered ClickUp lists
+    # Busca as tarefas de todas as listas registadas no arquivo de configuração
     for subject_name, list_id in LISTS_IDS.items():
         if not list_id:
             continue
-        print(f"Atualizando dados da Lista do ClickUp: '{subject_name}'...")
+        print(f"Procurando atualizações na lista do ClickUp: '{subject_name}'...")
         raw_tasks = get_clickup_list_tasks(list_id=list_id, api_key=API_KEY)
         cleaned_tasks = get_cleaned_tasks(raw_tasks)
 
         for task in cleaned_tasks:
+            task["subject_context"] = subject_name
             all_clickup_tasks[task["clickup_id"]] = task
 
-    print(f"Total de tarefas atualizadas: {len(all_clickup_tasks)}")
+    print(f"Total de tarefas ativas encontradas no ClickUp: {len(all_clickup_tasks)}")
+
+    # Mapeia os IDs que já existem na planilha para identificar o que é novo
+    existing_ids = set(sheet_df["ClickUp_ID"].dropna().astype(str).tolist())
     has_updates = False
 
-    # Check for differences row by row
+    # 1. Atualiza tarefas já existentes linha por linha
     for index, row in sheet_df.iterrows():
         clickup_id = row["ClickUp_ID"]
 
@@ -53,36 +63,76 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
             )
 
             if has_changed:
-                print(f"Sincronizando atualizações do ClickUp no Sheets: '{remote_task['title']}'")
+                print(f"🔄 Divergência encontrada! Atualizando a linha da tarefa: '{remote_task['title']}'")
 
                 sheet_df.at[index, "Tarefa"] = remote_task["title"]
                 sheet_df.at[index, "Descrição"] = remote_task["description"]
                 sheet_df.at[index, "Status"] = remote_task["status"]
                 sheet_df.at[index, "Prioridade"] = mapped_priority
-                sheet_df.at[index, "Responsável"] = remote_task["assignee"].capitalize()
+                sheet_df.at[index, "Responsável"] = remote_task["assignee"].capitalize() if remote_task[
+                    "assignee"] else ""
                 sheet_df.at[index, "Data de entrega"] = remote_task["due_date"]
 
-                # Recalculate hash immediately to align with ClickUp's current state
+                # Recalcula o Hash imediatamente para alinhar com o estado atual do ClickUp
                 updated_row = sheet_df.loc[index]
                 sheet_df.at[index, "Hash"] = generate_row_hash(updated_row)
                 has_updates = True
 
+    # 2. Identifica e adiciona tarefas completamente novas criadas direto no ClickUp
+    new_rows_to_append = []
+    for clickup_id, remote_task in all_clickup_tasks.items():
+        if clickup_id not in existing_ids:
+            print(f"➕ Nova tarefa remota encontrada no ClickUp! Adicionando à planilha: '{remote_task['title']}'")
+
+            mapped_priority = priority_map.get(remote_task["priority_id"], "Normal")
+
+            # Extrai o número da sprint baseado nas tags da tarefa
+            sprint_number = ""
+            for tag in remote_task.get("tags", []):
+                if "sprint" in tag.lower():
+                    parts = tag.lower().split()
+                    if len(parts) > 1 and parts[1].isdigit():
+                        sprint_number = int(parts[1])
+
+            new_row_dict = {
+                "ClickUp_ID": clickup_id,
+                "Tarefa": remote_task["title"],
+                "Responsável": remote_task["assignee"].capitalize() if remote_task["assignee"] else "",
+                "Data de entrega": remote_task["due_date"],
+                "Matéria": subject_map.get(remote_task["subject_context"], remote_task["subject_context"].capitalize()),
+                "Sprint": sprint_number,
+                "Descrição": remote_task["description"],
+                "Status": remote_task["status"],
+                "Prioridade": mapped_priority,
+                "Hash": ""
+            }
+
+            # Calcula o Hash inicial para este novo registro de linha
+            dummy_series = pd.Series(new_row_dict)
+            new_row_dict["Hash"] = generate_row_hash(dummy_series)
+
+            new_rows_to_append.append(new_row_dict)
+            has_updates = True
+
+    if new_rows_to_append:
+        new_tasks_df = pd.DataFrame(new_rows_to_append)
+        sheet_df = pd.concat([sheet_df, new_tasks_df], ignore_index=True)
+
     if has_updates:
-        print(f"{GREEN}Sincronização ClickUp -> Sheets concluída.{RESET}")
+        print(f"{GREEN}✓ Ciclo de fluxo reverso concluído com atualizações em memória.{RESET}")
     else:
-        print(f"{GREEN}Google Sheets já estava de acordo com o board.{RESET}")
+        print(f"{GREEN}✓ O Google Sheets já estava totalmente sincronizado com o ClickUp.{RESET}")
 
     return sheet_df
 
 
 def run_forward_sync(spread, sheet_df, sheet_name: str):
     """
-    FASE 2: Analisa novas linhas ou atualizações manuais locais dentro da planilha,
-    e então envia as alterações para o ClickUp.
+    FASE 2: Varre a planilha à procura de novas linhas criadas manualmente
+    ou modificações locais, enviando os dados atualizados para o ClickUp.
     """
-    print(f"\n{GREEN}=== FASE 2: SHEETS -> CLICKUP ==={RESET}")
+    print(f"\n{GREEN}=== FASE 2: INICIANDO FLUXO DE IDA (SHEETS -> CLICKUP) ==={RESET}")
 
-    # Process modifications or creations row by row
     for index, row in sheet_df.iterrows():
         headers, base_payload = build_base_request(
             title=row["Tarefa"],
@@ -98,7 +148,7 @@ def run_forward_sync(spread, sheet_df, sheet_name: str):
         old_hash = row["Hash"]
 
         if current_id:
-            # If task exists but hash differs, push local update
+            # Se a tarefa existe mas o hash mudou, envia a atualização para a API
             if old_hash != new_hash:
                 api_success = update_clickup_task(
                     base_payload=base_payload,
@@ -110,9 +160,9 @@ def run_forward_sync(spread, sheet_df, sheet_name: str):
                 )
                 if api_success:
                     sheet_df.at[index, "Hash"] = new_hash
-                    print(f"Tarefa '{row['Tarefa']}' atualizada no ClickUp.")
+                    print(f"✓ Tarefa '{row['Tarefa']}' atualizada com sucesso no ClickUp.")
         else:
-            # Create new task
+            # Cria uma tarefa totalmente nova no ClickUp
             task_id = create_clickup_task(
                 base_payload=base_payload,
                 headers=headers,
@@ -125,35 +175,36 @@ def run_forward_sync(spread, sheet_df, sheet_name: str):
             if task_id:
                 sheet_df.at[index, "ClickUp_ID"] = task_id
                 sheet_df.at[index, "Hash"] = new_hash
-                print(f"Tarefa '{row['Tarefa']}' criada com sucesso! ClickUp ID: {task_id}")
+                print(f"➕ Tarefa '{row['Tarefa']}' criada com sucesso! ID no ClickUp: {task_id}")
 
     return sheet_df
 
 
 def main():
-    print("=== CONECTANDO AO GOOGLE ===")
+    print("=== CONECTANDO AO ECOSSISTEMA DO GOOGLE ===")
     spreadsheet_name = "demandas"
     sheet_name = "demandas1o"
 
     spread, sheet = get_google_sheet_as_df(spreadsheet_name=spreadsheet_name, sheet_name=sheet_name)
-    print(f"Total de linhas no Google Sheets: {len(sheet)}")
+    print(f"Total de linhas encontradas na planilha: {len(sheet)}")
 
-    # Isolate and sanitize active ecosystem data
+    # Isola e limpa os dados ativos do ecossistema
     cleaned_df = get_cleaned_df(sheet)
 
-    # 1. Run Reverse Sync Phase
+    # 1. Executa a Fase do Fluxo Reverso (ClickUp -> DataFrame)
     working_df = run_reverse_sync(spread, cleaned_df, sheet_name)
 
-    # 2. Run Forward Sync Phase
+    # 2. Executa a Fase do Fluxo de Ida (DataFrame -> ClickUp)
     final_df = run_forward_sync(spread, working_df, sheet_name)
 
-    # 3. Save absolute state back to Google Sheets in a single safe database write
-    print(f"\n{GREEN}=== SALVANDO TODAS AS ALTERAÇÕES NO SHEETS ==={RESET}")
+    # 3. Grava o estado absoluto final de volta no Google Sheets em uma única operação segura
+    print(f"\n{GREEN}=== FASE DE COMMIT: SALVANDO ALTERAÇÕES NO GOOGLE SHEETS ==={RESET}")
     try:
         spread.df_to_sheet(final_df, index=False, sheet=sheet_name, replace=True)
-        print(f"{GREEN}PROCESSO CONCLUÍDO!{RESET}")
+        print(f"{GREEN}✓ Sincronização bidirecional concluída com sucesso!{RESET}")
     except Exception as error:
-        print(f"{RED}ERRO AO CONCLUIR PROCESSO: {error}{RESET}")
+        print(f"{RED}Erro crítico ao sobrescrever dados no Google Sheets: {error}{RESET}")
+
 
 if __name__ == "__main__":
     main()

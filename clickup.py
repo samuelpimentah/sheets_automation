@@ -131,20 +131,41 @@ def get_clickup_list_tasks(list_id: str, api_key: str) -> list[dict]:
 
 
 def get_cleaned_tasks(tasks: list[dict]) -> list[dict]:
-    """Recebe o json da resposta da API e separa apenas os dados úteis para o Sheets"""
+    """
+    Recebe o JSON bruto das tarefas da API do ClickUp e extrai os campos
+    relevantes utilizando chaves padronizadas em inglês.
+    """
     cleaned_tasks: list[dict] = []
 
     for task in tasks:
+        # Extrai de forma segura a estrutura de prioridade
         priority_data = task.get("priority")
         priority_id = int(priority_data["id"]) if priority_data and priority_data.get("id") else None
 
+        # Formata o timestamp para uma string de data limpa (YYYY-MM-DD)
         due_date_raw = task.get("due_date")
         formatted_date = ""
-        if due_date_raw:
-            formatted_date = pd.to_datetime(due_date_raw, unit='ms').strftime('%Y-%m-%d')
 
+        if due_date_raw:
+            try:
+                # CORREÇÃO CRÍTICA: Converte o timestamp de string para inteiro para evitar overflow no Pandas
+                timestamp_ms = int(due_date_raw)
+                formatted_date = pd.to_datetime(timestamp_ms, unit='ms').strftime('%Y-%m-%d')
+            except (ValueError, TypeError):
+                formatted_date = ""
+
+        # Extrai o username do responsável principal (assignee)
         assignees = task.get("assignees", [])
         primary_assignee = assignees[0]["username"] if assignees else ""
+
+        # Extrai os nomes das tags de forma segura para descobrir o contexto da sprint depois
+        raw_tags = task.get("tags", [])
+        tags_list = []
+        for tag in raw_tags:
+            if isinstance(tag, dict) and "name" in tag:
+                tags_list.append(tag["name"])
+            elif isinstance(tag, str):
+                tags_list.append(tag)
 
         cleaned_task = {
             "clickup_id": task.get("id"),
@@ -153,7 +174,8 @@ def get_cleaned_tasks(tasks: list[dict]) -> list[dict]:
             "status": task["status"]["status"].capitalize() if task.get("status") else "",
             "priority_id": priority_id,
             "due_date": formatted_date,
-            "assignee": primary_assignee
+            "assignee": primary_assignee,
+            "tags": tags_list
         }
         cleaned_tasks.append(cleaned_task)
 
