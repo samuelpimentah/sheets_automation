@@ -107,3 +107,54 @@ def update_clickup_task(
             print(f"{RED}Os dados mudaram, mas não foi possível adicionar a tag '{tag_name}' na tarefa {task_id}.{RESET}")
 
     return True
+
+def get_clickup_list_tasks(list_id: str, api_key: str) -> list[dict]:
+    """Busca os detalhes de uma tarefa específica do ClickUp."""
+
+    url = f"https://api.clickup.com/api/v2/list/{list_id}/task"
+    headers = {
+        "accept": "application/json",
+        "Authorization": api_key
+    }
+    query_params = {
+        "archived": "false",
+        "include_markdown_description": "false"
+    }
+
+    response = requests.get(url, headers=headers, params=query_params)
+
+    if response.status_code == 200:
+        return response.json().get("tasks", [])
+    else:
+        print(f"{RED}Erro ao tentar receber as tarefas do ClickUp: {response.status_code} - {response.text}{RESET}")
+        return []
+
+
+def get_cleaned_tasks(tasks: list[dict]) -> list[dict]:
+    """Recebe o json da resposta da API e separa apenas os dados úteis para o Sheets"""
+    cleaned_tasks: list[dict] = []
+
+    for task in tasks:
+        priority_data = task.get("priority")
+        priority_id = int(priority_data["id"]) if priority_data and priority_data.get("id") else None
+
+        due_date_raw = task.get("due_date")
+        formatted_date = ""
+        if due_date_raw:
+            formatted_date = pd.to_datetime(due_date_raw, unit='ms').strftime('%Y-%m-%d')
+
+        assignees = task.get("assignees", [])
+        primary_assignee = assignees[0]["username"] if assignees else ""
+
+        cleaned_task = {
+            "clickup_id": task.get("id"),
+            "title": task.get("name", ""),
+            "description": task.get("description", ""),
+            "status": task["status"]["status"].capitalize() if task.get("status") else "",
+            "priority_id": priority_id,
+            "due_date": formatted_date,
+            "assignee": primary_assignee
+        }
+        cleaned_tasks.append(cleaned_task)
+
+    return cleaned_tasks
