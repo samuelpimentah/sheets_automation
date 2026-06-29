@@ -8,7 +8,7 @@ from clickup import (
     get_cleaned_tasks
 )
 from colors import GREEN, RED, RESET
-from config import API_KEY, LISTS_IDS, MEMBERS_IDS, get_google_sheet_as_df
+from config import API_KEY, LISTS_IDS, MEMBERS_IDS, PRIORITIES, get_google_sheet_as_df
 
 
 def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
@@ -19,15 +19,13 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
     """
     print(f"\n{GREEN}=== FASE 1: INICIANDO FLUXO REVERSO (CLICKUP -> SHEETS) ==={RESET}")
 
-    priority_map = {1: "Urgente", 2: "Alta", 3: "Normal", 4: "Baixa"}
-    subject_map = {
-        "banco de dados": "Banco de dados",
-        "inteligência artificial": "Inteligência artificial"
-    }
+    priority_map = {v: k.capitalize() for k, v in PRIORITIES.items()}
+
+    member_id_map = {str(v): k.capitalize() for k, v in MEMBERS_IDS.items() if v}
 
     all_clickup_tasks = {}
 
-    # Busca as tarefas de todas as listas registadas no arquivo de configuração
+    # Busca as tarefas de todas as listas registradas no arquivo de configuração
     for subject_name, list_id in LISTS_IDS.items():
         if not list_id:
             continue
@@ -41,7 +39,6 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
 
     print(f"Total de tarefas ativas encontradas no ClickUp: {len(all_clickup_tasks)}")
 
-    # Mapeia os IDs que já existem na planilha para identificar o que é novo
     existing_ids = set(sheet_df["ClickUp_ID"].dropna().astype(str).tolist())
     has_updates = False
 
@@ -50,15 +47,31 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
         clickup_id = row["ClickUp_ID"]
 
         if clickup_id and clickup_id in all_clickup_tasks:
+            local_calculated_hash = generate_row_hash(row)
+            old_hash_saved = row["Hash"]
+
+            if old_hash_saved != local_calculated_hash:
+                print(
+                    f"⚠Ignorando atualização remota para '{row['Tarefa']}' porque há modificações locais no Sheets pendentes.")
+                continue
+
             remote_task = all_clickup_tasks[clickup_id]
-            mapped_priority = priority_map.get(remote_task["priority_id"], "Normal")
+
+        if clickup_id and clickup_id in all_clickup_tasks:
+            remote_task = all_clickup_tasks[clickup_id]
+            mapped_priority = priority_map.get(remote_task["priority_id"], "")
+
+            mapped_assignee = member_id_map.get(str(remote_task["assignee_id"]), "")
+            if not mapped_assignee and remote_task["assignee"]:
+                # Fallback de segurança: se o ID não estiver no .env, pega apenas a primeira palavra do nome do ClickUp
+                mapped_assignee = remote_task["assignee"].split()[0].capitalize()
 
             has_changed = (
                     row["Tarefa"] != remote_task["title"] or
                     row["Descrição"] != remote_task["description"] or
                     row["Status"] != remote_task["status"] or
                     row["Prioridade"] != mapped_priority or
-                    row["Responsável"].lower() != remote_task["assignee"].lower() or
+                    row["Responsável"] != mapped_assignee or
                     str(row["Data de entrega"]) != str(remote_task["due_date"])
             )
 
@@ -69,11 +82,9 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
                 sheet_df.at[index, "Descrição"] = remote_task["description"]
                 sheet_df.at[index, "Status"] = remote_task["status"]
                 sheet_df.at[index, "Prioridade"] = mapped_priority
-                sheet_df.at[index, "Responsável"] = remote_task["assignee"].capitalize() if remote_task[
-                    "assignee"] else ""
+                sheet_df.at[index, "Responsável"] = mapped_assignee
                 sheet_df.at[index, "Data de entrega"] = remote_task["due_date"]
 
-                # Recalcula o Hash imediatamente para alinhar com o estado atual do ClickUp
                 updated_row = sheet_df.loc[index]
                 sheet_df.at[index, "Hash"] = generate_row_hash(updated_row)
                 has_updates = True
@@ -84,9 +95,12 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
         if clickup_id not in existing_ids:
             print(f"➕ Nova tarefa remota encontrada no ClickUp! Adicionando à planilha: '{remote_task['title']}'")
 
-            mapped_priority = priority_map.get(remote_task["priority_id"], "Normal")
+            mapped_priority = priority_map.get(remote_task["priority_id"], "")
 
-            # Extrai o número da sprint baseado nas tags da tarefa
+            mapped_assignee = member_id_map.get(str(remote_task["assignee_id"]), "")
+            if not mapped_assignee and remote_task["assignee"]:
+                mapped_assignee = remote_task["assignee"].split()[0].capitalize()
+
             sprint_number = ""
             for tag in remote_task.get("tags", []):
                 if "sprint" in tag.lower():
@@ -97,9 +111,9 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
             new_row_dict = {
                 "ClickUp_ID": clickup_id,
                 "Tarefa": remote_task["title"],
-                "Responsável": remote_task["assignee"].capitalize() if remote_task["assignee"] else "",
+                "Responsável": mapped_assignee,
                 "Data de entrega": remote_task["due_date"],
-                "Matéria": subject_map.get(remote_task["subject_context"], remote_task["subject_context"].capitalize()),
+                "Matéria": remote_task["subject_context"],
                 "Sprint": sprint_number,
                 "Descrição": remote_task["description"],
                 "Status": remote_task["status"],
@@ -107,7 +121,6 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
                 "Hash": ""
             }
 
-            # Calcula o Hash inicial para este novo registro de linha
             dummy_series = pd.Series(new_row_dict)
             new_row_dict["Hash"] = generate_row_hash(dummy_series)
 
@@ -117,11 +130,6 @@ def run_reverse_sync(spread, sheet_df, sheet_name: str) -> pd.DataFrame:
     if new_rows_to_append:
         new_tasks_df = pd.DataFrame(new_rows_to_append)
         sheet_df = pd.concat([sheet_df, new_tasks_df], ignore_index=True)
-
-    if has_updates:
-        print(f"{GREEN}✓ Ciclo de fluxo reverso concluído com atualizações em memória.{RESET}")
-    else:
-        print(f"{GREEN}✓ O Google Sheets já estava totalmente sincronizado com o ClickUp.{RESET}")
 
     return sheet_df
 
@@ -183,7 +191,7 @@ def run_forward_sync(spread, sheet_df, sheet_name: str):
 def main():
     print("=== CONECTANDO AO ECOSSISTEMA DO GOOGLE ===")
     spreadsheet_name = "demandas"
-    sheet_name = "demandas1o"
+    sheet_name = "demandas2o"
 
     spread, sheet = get_google_sheet_as_df(spreadsheet_name=spreadsheet_name, sheet_name=sheet_name)
     print(f"Total de linhas encontradas na planilha: {len(sheet)}")

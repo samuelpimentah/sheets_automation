@@ -46,11 +46,11 @@ def create_clickup_task(
     Retorna o ID da tarefa processada.
     """
 
-    list_id = int(lists_ids[subject.lower()]) if subject.lower() in lists_ids.keys() else None
+    list_id = int(lists_ids[subject.lower()]) if subject.upper() in lists_ids.keys() else None
     assignee_id = int(members_ids[assignee.lower()]) if assignee.lower() in members_ids.keys() else None
 
     if list_id is not None:
-        url = f"https://api.clickup.com/api/v2/list/{list_id}/task"
+        url = f"https://api.clickup.com/api/v2/list/{list_id}/task?archived=false&include_closed=true"
     else:
         print(f"{RED}Board não encontrado para a matéria: {subject}{RESET}")
         return None
@@ -79,7 +79,7 @@ def update_clickup_task(
     """
     Atualiza (PUT) uma tarefa existente no ClickUp com base no ID gerado pelo ClickUp
     """
-    url_task = f"https://api.clickup.com/api/v2/task/{task_id}"
+    url_task = f"https://api.clickup.com/api/v2/task/{task_id}?archived=false&include_closed=true"
 
     assignee_id = int(members_ids[assignee.lower()]) if assignee.lower() in members_ids.keys() else None
 
@@ -111,17 +111,13 @@ def update_clickup_task(
 def get_clickup_list_tasks(list_id: str, api_key: str) -> list[dict]:
     """Busca os detalhes de uma tarefa específica do ClickUp."""
 
-    url = f"https://api.clickup.com/api/v2/list/{list_id}/task"
+    url = f"https://api.clickup.com/api/v2/list/{list_id}/task?archived=false&include_closed=true"
     headers = {
         "accept": "application/json",
         "Authorization": api_key
     }
-    query_params = {
-        "archived": "false",
-        "include_markdown_description": "false"
-    }
 
-    response = requests.get(url, headers=headers, params=query_params)
+    response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
         return response.json().get("tasks", [])
@@ -148,15 +144,16 @@ def get_cleaned_tasks(tasks: list[dict]) -> list[dict]:
 
         if due_date_raw:
             try:
-                # CORREÇÃO CRÍTICA: Converte o timestamp de string para inteiro para evitar overflow no Pandas
                 timestamp_ms = int(due_date_raw)
                 formatted_date = pd.to_datetime(timestamp_ms, unit='ms').strftime('%Y-%m-%d')
             except (ValueError, TypeError):
                 formatted_date = ""
 
-        # Extrai o username do responsável principal (assignee)
+        # Extrai o username e o ID do responsável principal (assignee)
         assignees = task.get("assignees", [])
         primary_assignee = assignees[0]["username"] if assignees else ""
+        primary_assignee_id = str(
+            assignees[0]["id"]) if assignees else ""
 
         # Extrai os nomes das tags de forma segura para descobrir o contexto da sprint depois
         raw_tags = task.get("tags", [])
@@ -174,7 +171,8 @@ def get_cleaned_tasks(tasks: list[dict]) -> list[dict]:
             "status": task["status"]["status"].capitalize() if task.get("status") else "",
             "priority_id": priority_id,
             "due_date": formatted_date,
-            "assignee": primary_assignee,
+            "assignee": primary_assignee.capitalize() if primary_assignee else "",
+            "assignee_id": primary_assignee_id,
             "tags": tags_list
         }
         cleaned_tasks.append(cleaned_task)

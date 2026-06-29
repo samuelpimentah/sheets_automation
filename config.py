@@ -17,14 +17,25 @@ PRIORITIES = {
 API_KEY = os.getenv("CLICKUP_API_KEY")
 
 MEMBERS_IDS = {
-    "bruno": os.getenv("MEMBER_ID"),
-    "gabriel": os.getenv("MEMBER_ID"),
-    "pietra": os.getenv("MEMBER_ID")
+    "ana": os.getenv("ANA_MEMBER_ID"),
+    "davi": os.getenv("DAVI_MEMBER_ID"),
+    "joão": os.getenv("JOAO_MEMBER_ID"),
+    "mariana": os.getenv("MARIANA_MEMBER_ID"),
+    "rahquel": os.getenv("RAHQUEL_MEMBER_ID"),
+    "samuel": os.getenv("SAMUEL_MEMBER_ID")
 }
 
 LISTS_IDS = {
-    "banco de dados": os.getenv("BD_LIST_ID"),
-    "inteligência artificial": os.getenv("IA_LIST_ID")
+    "MODELAGEM": os.getenv("MODELAGEM_BOARD_ID"),
+    "BD2": os.getenv("BD2_BOARD_ID"),
+    "IA2": os.getenv("IA2_BOARD_ID"),
+    "BI": os.getenv("BI_BOARD_ID"),
+    "DEVOPS": os.getenv("DEVOPS_BOARD_ID"),
+    "EQS": os.getenv("EQS_BOARD_ID"),
+    "DS2": os.getenv("DS2_BOARD_ID"),
+    "DAD": os.getenv("DAD_BOARD_ID"),
+    "MOBILE": os.getenv("MOBILE_BOARD_ID"),
+    "UX2": os.getenv("UX2_BOARD_ID"),
 }
 
 def get_google_sheet_as_df(spreadsheet_name: str, sheet_name: str) -> Spread | Any:

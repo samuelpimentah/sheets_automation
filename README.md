@@ -55,5 +55,5 @@ Abaixo está o plano de evolução do projeto. Sinta-se à vontade para acompanh
 - [x]  **Fase 1:** Extração e limpeza simples de arquivos Excel (`.xlsx`) localizados diretamente na pasta do projeto.
 - [x]  **Fase 2:** Varredura automática de uma pasta local para extração e limpeza de múltiplos arquivos, conectando com a API do ClickUp para inserção das tarefas no Board.
 - [x]  **Fase 3:** Migração para nuvem. Extração e tratamento de dados diretamente do Google Sheets via API oficial do Google e inserção automatizada no ClickUp.
-- [ ]  **Fase 4 (Fluxo Reverso):** Sincronização reversa. Monitorar o Board do ClickUp e exportar/atualizar as informações das tarefas de volta para o Google Sheets.
+- [x]  **Fase 4 (Fluxo Reverso):** Sincronização reversa. Monitorar o Board do ClickUp e exportar/atualizar as informações das tarefas de volta para o Google Sheets.
 - [ ]  **Fase 5:** Implementação de um agente de IA para criação de descrições de tarefas mais detalhadas e sugestões de prazos com base no conteúdo das planilhas.

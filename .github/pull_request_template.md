@@ -29,3 +29,4 @@
 - [ ] Foram realizados testes unitários para as novas funcionalidades.
 - [ ] A documentação foi atualizada conforme necessário.
 - [ ] A alteração não introduz novos bugs ou falhas.
+- [ ] O PR foi revisado por pelo menos um membro da equipe.
