@@ -49,7 +49,7 @@ def get_google_sheet_as_df(spreadsheet_name: str, sheet_name: str) -> Spread | A
         "https://www.googleapis.com/auth/drive"
     ]
 
-    env_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    env_creds = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 
     if env_creds:
         # Tenta carregar do ambiente (GitHub Actions)

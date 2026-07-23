@@ -28,8 +28,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      
+
       - name: Run automation
+        env:
+          CLICKUP_API_KEY: ${{ secrets.CLICKUP_API_KEY }}
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+
+          ANA_MEMBER_ID: ${{ vars.ANA_MEMBER_ID }}
+          DAVI_MEMBER_ID: ${{ vars.DAVI_MEMBER_ID }}
+          JOAO_MEMBER_ID: ${{ vars.JOAO_MEMBER_ID }}
+          MARIANA_MEMBER_ID: ${{ vars.MARIANA_MEMBER_ID }}
+          RAHQUEL_MEMBER_ID: ${{ vars.RAHQUEL_MEMBER_ID }}
+          SAMUEL_MEMBER_ID: ${{ vars.SAMUEL_MEMBER_ID }}
+
+          MODELAGEM_BOARD_ID: ${{ vars.MODELAGEM_BOARD_ID }}
+          BD2_BOARD_ID: ${{ vars.BD2_BOARD_ID }}
+          IA2_BOARD_ID: ${{ vars.IA2_BOARD_ID }}
+          BI_BOARD_ID: ${{ vars.BI_BOARD_ID }}
+          DEVOPS_BOARD_ID: ${{ vars.DEVOPS_BOARD_ID }}
+          EQS_BOARD_ID: ${{ vars.EQS_BOARD_ID }}
+          DS2_BOARD_ID: ${{ vars.DS2_BOARD_ID }}
+          DAD_BOARD_ID: ${{ vars.DAD_BOARD_ID }}
+          MOBILE_BOARD_ID: ${{ vars.MOBILE_BOARD_ID }}
+          UX2_BOARD_ID: ${{ vars.UX2_BOARD_ID }}
         run: python main.py
       
       - name: Log execution status
