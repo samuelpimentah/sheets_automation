@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any
 
@@ -48,7 +49,15 @@ def get_google_sheet_as_df(spreadsheet_name: str, sheet_name: str) -> Spread | A
         "https://www.googleapis.com/auth/drive"
     ]
 
-    credentials = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    env_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+    if env_creds:
+        # Tenta carregar do ambiente (GitHub Actions)
+        creds_dict = json.loads(env_creds)
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    else:
+        credentials = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+
     spread = Spread(spreadsheet_name, creds=credentials)
 
     df = spread.sheet_to_df(sheet=sheet_name, index=None)
